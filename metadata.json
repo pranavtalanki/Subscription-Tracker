@@ -1,0 +1,6 @@
+{
+  "name": "Subscription Tracker",
+  "description": "Track paid subscriptions like Netflix, Spotify, and gym memberships with expense dashboards, calendar views, automated Gmail confirmation syncing, and smart billing reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

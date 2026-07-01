@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "Subscription": {
+      "title": "Subscription",
+      "description": "A tracked recurring subscription",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "billingCycle": { "type": "string", "enum": ["weekly", "monthly", "yearly"] },
+        "nextBillingDate": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "paused", "cancelled"] },
+        "category": { "type": "string" },
+        "notes": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "amount", "currency", "billingCycle", "nextBillingDate", "paymentMethod", "status", "category", "userId"]
+    },
+    "NotificationSettings": {
+      "title": "NotificationSettings",
+      "description": "User specific notification settings",
+      "type": "object",
+      "properties": {
+        "budgetThreshold": { "type": "number" },
+        "enableReminders": { "type": "boolean" },
+        "reminderDaysBefore": { "type": "number" },
+        "enableBudgetAlerts": { "type": "boolean" }
+      },
+      "required": ["budgetThreshold", "enableReminders", "reminderDaysBefore", "enableBudgetAlerts"]
+    },
+    "Alert": {
+      "title": "Alert",
+      "description": "A notification alert for budget or billing cycles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["warning", "info", "success"] },
+        "message": { "type": "string" },
+        "date": { "type": "string" },
+        "read": { "type": "boolean" },
+        "userId": { "type": "string" }
+      },
+      "required": ["type", "message", "date", "read", "userId"]
+    }
+  },
+  "firestore": {
+    "users/{userId}/subscriptions/{subscriptionId}": {
+      "schema": "Subscription",
+      "description": "Subscriptions tracked by the user"
+    },
+    "users/{userId}/settings/notification_rules": {
+      "schema": "NotificationSettings",
+      "description": "Notification settings for the user"
+    },
+    "users/{userId}/alerts/{alertId}": {
+      "schema": "Alert",
+      "description": "Billing or budget notification alerts for the user"
+    }
+  }
+}
