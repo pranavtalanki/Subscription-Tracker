@@ -1,0 +1,5 @@
+{
+	"appId": "com.subscriptiontracker.app",
+	"appName": "Subscription Tracker",
+	"webDir": "dist"
+}

@@ -43,6 +43,7 @@ export default function NotificationsSettings({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
     onSaveSettings({
       budgetThreshold: Number(budgetThreshold),
       enableReminders,
@@ -51,7 +52,9 @@ export default function NotificationsSettings({
     });
     
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2000);
+    setTimeout(() => {
+      setIsSaved(false);
+    }, 1500);
   };
 
   return (
@@ -87,7 +90,7 @@ export default function NotificationsSettings({
 
             <div className="pt-2 flex items-center gap-3">
               <div className="relative max-w-44">
-                <div className="absolute left-3.5 top-2.5 text-slate-500 font-bold">$</div>
+                <div className="absolute left-3.5 top-2.5 text-slate-500 font-bold">₹</div>
                 <input
                   type="number"
                   value={budgetThreshold}
@@ -95,7 +98,7 @@ export default function NotificationsSettings({
                   className="w-full pl-7 pr-3 py-2 bg-[#121214] border border-white/5 rounded-lg font-bold text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
-              <span className="text-[10px] font-semibold text-slate-500">USD per month (0 to disable)</span>
+              <span className="text-[10px] font-semibold text-slate-500">INR per month (0 to disable)</span>
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer pt-1.5">

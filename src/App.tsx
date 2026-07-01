@@ -33,6 +33,7 @@ import TableView from './components/TableView';
 import SyncGmailModal from './components/SyncGmailModal';
 import SubscriptionFormModal from './components/SubscriptionFormModal';
 import NotificationsSettings from './components/NotificationsSettings';
+import { Capacitor } from '@capacitor/core';
 
 // Icons
 import { 
@@ -42,14 +43,16 @@ import {
   Settings, 
   Plus, 
   Sparkles, 
-  RefreshCw 
+  RefreshCw,
+  Smartphone,
+  Monitor
 } from 'lucide-react';
 
 const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   {
     name: 'Netflix Premium',
-    amount: 22.99,
-    currency: 'USD',
+    amount: 649.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-15',
     paymentMethod: 'Visa ****4242',
@@ -59,8 +62,8 @@ const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   },
   {
     name: 'Spotify Family',
-    amount: 16.99,
-    currency: 'USD',
+    amount: 179.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-20',
     paymentMethod: 'Mastercard ****8811',
@@ -70,8 +73,8 @@ const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   },
   {
     name: 'OpenAI ChatGPT Plus',
-    amount: 20.00,
-    currency: 'USD',
+    amount: 1999.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-10',
     paymentMethod: 'Visa ****4242',
@@ -81,8 +84,8 @@ const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   },
   {
     name: 'Gold\'s Gym Membership',
-    amount: 49.99,
-    currency: 'USD',
+    amount: 2499.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-02',
     paymentMethod: 'Bank ACH Auto-debit',
@@ -92,8 +95,8 @@ const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   },
   {
     name: 'Adobe Creative Cloud',
-    amount: 54.99,
-    currency: 'USD',
+    amount: 4630.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-28',
     paymentMethod: 'PayPal Express',
@@ -103,8 +106,8 @@ const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   },
   {
     name: 'ClassPass Credits',
-    amount: 79.00,
-    currency: 'USD',
+    amount: 3999.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-25',
     paymentMethod: 'Apple Pay',
@@ -114,8 +117,8 @@ const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   },
   {
     name: 'AWS Cloud Micro',
-    amount: 12.50,
-    currency: 'USD',
+    amount: 1050.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-01',
     paymentMethod: 'Visa ****1111',
@@ -125,8 +128,8 @@ const SAMPLE_SUBSCRIPTIONS: Omit<Subscription, 'id' | 'userId'>[] = [
   },
   {
     name: 'High-speed Fiber Internet',
-    amount: 85.00,
-    currency: 'USD',
+    amount: 1250.00,
+    currency: 'INR',
     billingCycle: 'monthly',
     nextBillingDate: '2026-07-05',
     paymentMethod: 'Amex Card',
@@ -145,6 +148,10 @@ const DEFAULT_SETTINGS: NotificationSettings = {
 
 export default function App() {
   
+  // Capacitor and Preview mode
+  const isNative = useMemo(() => Capacitor.isNativePlatform(), []);
+  const [isPreviewAndroidMode, setIsPreviewAndroidMode] = useState(false);
+
   // Tab control
   const [activeTab, setActiveTab] = useState<'dashboard' | 'calendar' | 'table' | 'settings'>('dashboard');
   
@@ -272,7 +279,7 @@ export default function App() {
 
     // Check if budget alerts need to be generated
     if (isOver && settings.enableBudgetAlerts) {
-      const budgetAlertMessage = `Monthly spending limit warning! Total recurring expense of $${currentMonthlySpending.toFixed(2)} exceeds your alert threshold of $${settings.budgetThreshold.toFixed(0)}.`;
+      const budgetAlertMessage = `Monthly spending limit warning! Total recurring expense of ₹${currentMonthlySpending.toFixed(2)} exceeds your alert threshold of ₹${settings.budgetThreshold.toFixed(0)}.`;
       
       // Prevent duplicate warnings on the same day
       const exists = alerts.some(a => a.type === 'warning' && a.date.startsWith(todayStr) && a.message.includes('limit warning'));
@@ -295,7 +302,7 @@ export default function App() {
         const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         
         if (diffDays > 0 && diffDays <= settings.reminderDaysBefore) {
-          const billingAlertMessage = `Advance Reminder: "${sub.name}" with recurring charge of $${sub.amount.toFixed(2)} is due in ${diffDays} days (${sub.nextBillingDate}).`;
+          const billingAlertMessage = `Advance Reminder: "${sub.name}" with recurring charge of ₹${sub.amount.toFixed(2)} is due in ${diffDays} days (${sub.nextBillingDate}).`;
           
           // Deduplicate billing alerts
           const exists = alerts.some(a => a.message.includes(sub.name) && a.message.includes('Reminder') && a.date.startsWith(todayStr));
@@ -389,6 +396,38 @@ export default function App() {
       setSubscriptions(updated);
       localStorage.setItem('local_subscriptions', JSON.stringify(updated));
     }
+  };
+
+  const handleConfirmPayment = async (sub: Subscription) => {
+    // Safely advance billing date without timezone/DST shifting issues
+    const nextDate = new Date(sub.nextBillingDate + 'T12:00:00');
+    if (sub.billingCycle === 'monthly') {
+      nextDate.setMonth(nextDate.getMonth() + 1);
+    } else if (sub.billingCycle === 'yearly') {
+      nextDate.setFullYear(nextDate.getFullYear() + 1);
+    } else if (sub.billingCycle === 'weekly') {
+      nextDate.setDate(nextDate.getDate() + 7);
+    }
+
+    const yyyy = nextDate.getFullYear();
+    const mm = String(nextDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(nextDate.getDate()).padStart(2, '0');
+    const nextBillingDateStr = `${yyyy}-${mm}-${dd}`;
+
+    // Update subscription
+    await handleSaveSubscription({
+      ...sub,
+      nextBillingDate: nextBillingDateStr
+    });
+
+    // Fire alert log
+    await triggerLocalOrDbAlert({
+      type: 'success',
+      message: `Confirmed payment for ${sub.name}. Next billing advanced to ${nextBillingDateStr}.`,
+      date: new Date().toISOString(),
+      read: false,
+      userId: user?.uid || 'guest'
+    });
   };
 
   const handleSaveSettings = async (newSettings: NotificationSettings) => {
@@ -510,27 +549,10 @@ export default function App() {
     localStorage.setItem('local_alerts', JSON.stringify(sampleWelcomeAlerts));
   };
 
-  return (
-    <div className="min-h-screen bg-[#0a0a0b] text-slate-100 flex flex-col font-sans selection:bg-indigo-500/20 selection:text-white">
-      
-      {/* Master Navbar */}
-      <Navbar 
-        user={user}
-        needsAuth={needsAuth}
-        isLoggingIn={isLoggingIn}
-        onLogin={handleLogin}
-        onLogout={handleLogout}
-        onOpenGmailSync={() => setIsGmailSyncOpen(true)}
-        alerts={alerts}
-        onMarkAlertAsRead={handleMarkAlertAsRead}
-        onClearAllAlerts={handleClearAllAlerts}
-        onAddSampleData={handleLoadSampleDemoData}
-        hasSubscriptions={subscriptions.length > 0}
-      />
-
-      {/* Main Body Grid */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        
+  // Render content within appropriate container
+  const renderAppContent = () => {
+    return (
+      <div className="space-y-6">
         {/* Sync Info Header */}
         {isLoadingDb && (
           <div className="bg-[#121214] border border-white/5 rounded-xl p-3 flex items-center gap-3 text-xs text-slate-400 justify-center">
@@ -541,19 +563,19 @@ export default function App() {
 
         {/* Demo Mode Visual Indicator Banner */}
         {!user && subscriptions.length > 0 && (
-          <div className="bg-gradient-to-r from-indigo-950/40 to-indigo-900/40 border border-indigo-500/20 text-white rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="bg-gradient-to-r from-indigo-950/40 to-indigo-900/40 border border-indigo-500/20 text-white rounded-2xl p-4 shadow-xl flex flex-col justify-between gap-3 text-xs">
             <div className="space-y-0.5">
               <span className="font-extrabold flex items-center gap-1.5 text-sm text-indigo-200">
                 <Sparkles className="h-4 w-4 text-amber-300 animate-pulse" />
                 Demo Trail Mode Active
               </span>
-              <p className="text-indigo-200 font-medium">
-                You are managing data offline in Local Storage. Sign in with Google to enable automatic Gmail email invoice scanning, live alerts, and real-time database sync.
+              <p className="text-indigo-200/95 font-medium leading-relaxed">
+                Offline state in Local Storage. Sign in with Google to enable automatic Gmail email invoice scanning.
               </p>
             </div>
             <button
               onClick={handleLogin}
-              className="bg-white hover:bg-slate-100 text-indigo-950 font-bold px-4 py-2 rounded-xl transition shadow-sm shrink-0 text-center cursor-pointer"
+              className="bg-white hover:bg-slate-100 text-indigo-950 font-bold px-4 py-1.5 rounded-xl transition shadow-sm shrink-0 text-center cursor-pointer text-[11px]"
             >
               Secure Sync Now
             </button>
@@ -562,29 +584,29 @@ export default function App() {
 
         {/* App Empty Workspace Landing */}
         {subscriptions.length === 0 && (
-          <div className="bg-[#121214] border border-white/5 rounded-3xl p-12 text-center max-w-xl mx-auto shadow-2xl space-y-6 my-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-indigo-950/40 text-indigo-400 p-4 rounded-2xl inline-block border border-indigo-500/30">
-              <Sparkles className="h-10 w-10 text-indigo-400" />
+          <div className="bg-[#121214] border border-white/5 rounded-3xl p-8 text-center max-w-md mx-auto shadow-2xl space-y-5 my-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="bg-indigo-950/40 text-indigo-400 p-3 rounded-2xl inline-block border border-indigo-500/30">
+              <Sparkles className="h-8 w-8 text-indigo-400" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-xl font-bold text-white tracking-tight">Track, Sync, and Save money</h2>
+              <h2 className="text-base font-bold text-white tracking-tight">Track, Sync, and Save Money</h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Take full control of recurring subscriptions. Never experience vampire auto-charges. Auto-scan billing cycles straight from your inbox or log accounts manually.
+                Take full control of recurring subscriptions. Auto-scan billing cycles straight from your inbox or log accounts manually.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
+            <div className="flex flex-col gap-2.5 pt-2">
               <button
                 onClick={() => {
                   setSelectedSubscription(null);
                   setIsFormOpen(true);
                 }}
-                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3.5 px-6 rounded-xl shadow-lg transition cursor-pointer"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl shadow-lg transition cursor-pointer"
               >
                 Create Manual Subscription
               </button>
               <button
                 onClick={handleLoadSampleDemoData}
-                className="w-full sm:w-auto bg-[#1c1c1f] hover:bg-[#252529] text-slate-300 font-bold text-xs py-3.5 px-6 rounded-xl border border-white/5 transition cursor-pointer"
+                className="w-full bg-[#1c1c1f] hover:bg-[#252529] text-slate-300 font-bold text-xs py-3 rounded-xl border border-white/5 transition cursor-pointer"
               >
                 Load Sample Demo Data
               </button>
@@ -597,66 +619,66 @@ export default function App() {
           <div className="space-y-6">
             
             {/* Nav Headers */}
-            <div className="flex border-b border-white/5 gap-1 overflow-x-auto scrollbar-none pb-0.5">
+            <div className="flex border-b border-white/5 gap-0.5 overflow-x-auto scrollbar-none pb-0.5">
               
               <button
                 onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center gap-2 py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+                className={`flex items-center gap-1.5 py-2.5 px-3.5 text-xs font-bold transition border-b-2 cursor-pointer whitespace-nowrap ${
                   activeTab === 'dashboard' 
                     ? 'border-indigo-500 text-indigo-400' 
                     : 'border-transparent text-slate-400 hover:text-white'
                 }`}
               >
-                <LayoutDashboard className="h-4 w-4" />
-                <span>Dashboard Analytics</span>
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                <span>Dashboard</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('calendar')}
-                className={`flex items-center gap-2 py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+                className={`flex items-center gap-1.5 py-2.5 px-3.5 text-xs font-bold transition border-b-2 cursor-pointer whitespace-nowrap ${
                   activeTab === 'calendar' 
                     ? 'border-indigo-500 text-indigo-400' 
                     : 'border-transparent text-slate-400 hover:text-white'
                 }`}
               >
-                <Calendar className="h-4 w-4" />
-                <span>Calendar Matrix</span>
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Calendar</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('table')}
-                className={`flex items-center gap-2 py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+                className={`flex items-center gap-1.5 py-2.5 px-3.5 text-xs font-bold transition border-b-2 cursor-pointer whitespace-nowrap ${
                   activeTab === 'table' 
                     ? 'border-indigo-500 text-indigo-400' 
                     : 'border-transparent text-slate-400 hover:text-white'
                 }`}
               >
-                <Table className="h-4 w-4" />
-                <span>Subscriptions List</span>
+                <Table className="h-3.5 w-3.5" />
+                <span>List</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('settings')}
-                className={`flex items-center gap-2 py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+                className={`flex items-center gap-1.5 py-2.5 px-3.5 text-xs font-bold transition border-b-2 cursor-pointer whitespace-nowrap ${
                   activeTab === 'settings' 
                     ? 'border-indigo-500 text-indigo-400' 
                     : 'border-transparent text-slate-400 hover:text-white'
                 }`}
               >
-                <Settings className="h-4 w-4" />
-                <span>Settings & Rules</span>
+                <Settings className="h-3.5 w-3.5" />
+                <span>Settings</span>
               </button>
 
-              {/* Quick floating Manual Add shortcut on the right */}
+              {/* Quick Add shortcut */}
               <button
                 onClick={() => {
                   setSelectedSubscription(null);
                   setIsFormOpen(true);
                 }}
-                className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] px-3.5 py-1.5 rounded-lg flex items-center gap-1 transition shadow-md cursor-pointer whitespace-nowrap self-center uppercase tracking-wider"
+                className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-md cursor-pointer whitespace-nowrap self-center uppercase tracking-wider animate-pulse"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add Sub</span>
+                <Plus className="h-3 w-3" />
+                <span>Add</span>
               </button>
             </div>
 
@@ -671,6 +693,8 @@ export default function App() {
                     setSelectedSubscription(null);
                     setIsFormOpen(true);
                   }}
+                  onConfirmPayment={handleConfirmPayment}
+                  isAndroid={isNative || isPreviewAndroidMode}
                 />
               )}
 
@@ -708,8 +732,113 @@ export default function App() {
 
           </div>
         )}
+      </div>
+    );
+  };
 
-      </main>
+  return (
+    <div className="min-h-screen bg-[#0a0a0b] text-slate-100 flex flex-col font-sans selection:bg-indigo-500/20 selection:text-white">
+      
+      {/* Master Navbar */}
+      <Navbar 
+        user={user}
+        needsAuth={needsAuth}
+        isLoggingIn={isLoggingIn}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        onOpenGmailSync={() => setIsGmailSyncOpen(true)}
+        alerts={alerts}
+        onMarkAlertAsRead={handleMarkAlertAsRead}
+        onClearAllAlerts={handleClearAllAlerts}
+        onAddSampleData={handleLoadSampleDemoData}
+        hasSubscriptions={subscriptions.length > 0}
+      />
+
+      {/* Platform Preview Toggle Bar (Only shown on Desktop/Browser) */}
+      {!isNative && (
+        <div className="bg-[#121214] border-b border-white/5 py-2 px-4 flex items-center justify-between text-xs text-slate-400 shrink-0">
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-emerald-400" />
+            <span className="font-semibold text-slate-300">Android Build Active</span>
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 font-extrabold uppercase px-2 py-0.5 rounded-full border border-emerald-500/20">
+              SDK 34 (Capacitor)
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-1.5 bg-[#1c1c1f] p-1 rounded-lg border border-white/5">
+            <button
+              onClick={() => setIsPreviewAndroidMode(false)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-bold transition cursor-pointer text-[11px] ${
+                !isPreviewAndroidMode 
+                  ? 'bg-indigo-600 text-white shadow-sm' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Monitor className="h-3.5 w-3.5" />
+              <span>Web Portal</span>
+            </button>
+            <button
+              onClick={() => setIsPreviewAndroidMode(true)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-bold transition cursor-pointer text-[11px] ${
+                isPreviewAndroidMode 
+                  ? 'bg-indigo-600 text-white shadow-sm' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              <span>Android Preview</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Container */}
+      {!isNative && isPreviewAndroidMode ? (
+        /* Immersive Smartphone Viewport Container */
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-radial from-[#121214] via-[#0d0d0e] to-black overflow-y-auto">
+          
+          {/* Smartphone Frame Wrapper */}
+          <div className="relative bg-[#121214] rounded-[52px] p-3.5 shadow-[0_0_80px_rgba(0,0,0,0.85)] border-[8px] border-[#252529] w-full max-w-[390px] h-[812px] flex flex-col overflow-hidden ring-1 ring-white/10 select-none">
+            
+            {/* Top Ear Speaker Bar */}
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-1 bg-[#2d2d31] rounded-full z-50" />
+            
+            {/* Front Camera Punch Hole */}
+            <div className="absolute top-5 left-1/2 -translate-x-1/2 w-4 h-4 bg-black rounded-full z-50 ring-2 ring-[#1b1b1d] flex items-center justify-center">
+              <div className="w-1.5 h-1.5 bg-[#0f172a] rounded-full" />
+            </div>
+
+            {/* Android System Status Bar */}
+            <div className="h-9 bg-[#0a0a0b] text-white flex items-center justify-between px-6 text-[11px] select-none z-40 shrink-0 font-semibold font-sans">
+              <span>{new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black tracking-tighter">5G</span>
+                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M2 22h20V2H2v20z" opacity="0.3" />
+                  <path d="M17 22h5V7l-5 5v10z" />
+                </svg>
+                <div className="flex items-center gap-0.5 border border-white/40 rounded px-0.5 py-0.25 h-3">
+                  <div className="w-2.5 h-1.5 bg-emerald-400 rounded-sm" />
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable Viewport Container for actual App inside phone */}
+            <div className="flex-1 flex flex-col overflow-y-auto scrollbar-none bg-[#0a0a0b] p-4 pb-16 relative">
+              {renderAppContent()}
+            </div>
+
+            {/* Bottom Android Gesture Indicator Pill */}
+            <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 w-28 h-1 bg-white/40 rounded-full z-50 pointer-events-none" />
+          </div>
+
+        </div>
+      ) : (
+        /* Regular Full Desktop Portal View */
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+          {renderAppContent()}
+        </main>
+      )}
 
       {/* Gmail scanning slideover or popup */}
       <SyncGmailModal 

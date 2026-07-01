@@ -13,12 +13,16 @@ import {
   PieChart
 } from 'lucide-react';
 import { Subscription, NotificationSettings } from '../types';
+import { getUserLocalCurrency, convertCurrency, formatCurrency } from '../lib/currency';
+import PaymentConfirmQueue from './PaymentConfirmQueue';
 
 interface DashboardViewProps {
   subscriptions: Subscription[];
   settings: NotificationSettings;
   onNavigateToTab: (tab: 'calendar' | 'table') => void;
   onOpenAddSubscription: () => void;
+  onConfirmPayment: (sub: Subscription) => void;
+  isAndroid?: boolean;
 }
 
 export default function DashboardView({
@@ -26,8 +30,19 @@ export default function DashboardView({
   settings,
   onNavigateToTab,
   onOpenAddSubscription,
+  onConfirmPayment,
+  isAndroid = false,
 }: DashboardViewProps) {
   
+  const localCurrency = getUserLocalCurrency();
+
+  // Helper to adjust font size on narrow viewports/long amounts to prevent text overflow
+  const getAmountFontSize = (val: string) => {
+    if (val.length > 12) return 'text-xl sm:text-2xl md:text-3xl';
+    if (val.length > 8) return 'text-2xl sm:text-3xl';
+    return 'text-3xl';
+  };
+
   // 1. Calculations
   const activeSubs = useMemo(() => subscriptions.filter(s => s.status === 'active'), [subscriptions]);
   
@@ -38,16 +53,17 @@ export default function DashboardView({
     activeSubs.forEach(sub => {
       let subMonthly = 0;
       let subYearly = 0;
+      const localAmount = convertCurrency(sub.amount, sub.currency || 'USD', localCurrency.code);
       
       if (sub.billingCycle === 'monthly') {
-        subMonthly = sub.amount;
-        subYearly = sub.amount * 12;
+        subMonthly = localAmount;
+        subYearly = localAmount * 12;
       } else if (sub.billingCycle === 'yearly') {
-        subMonthly = sub.amount / 12;
-        subYearly = sub.amount;
+        subMonthly = localAmount / 12;
+        subYearly = localAmount;
       } else if (sub.billingCycle === 'weekly') {
-        subMonthly = sub.amount * 4.33;
-        subYearly = sub.amount * 52;
+        subMonthly = localAmount * 4.33;
+        subYearly = localAmount * 52;
       }
       
       monthlyTotal += subMonthly;
@@ -58,7 +74,7 @@ export default function DashboardView({
       monthly: Math.round(monthlyTotal * 100) / 100,
       yearly: Math.round(yearlyTotal * 100) / 100
     };
-  }, [activeSubs]);
+  }, [activeSubs, localCurrency.code]);
 
   // 2. Category Breakdown
   const categoryData = useMemo(() => {
@@ -73,9 +89,10 @@ export default function DashboardView({
 
     activeSubs.forEach(sub => {
       let subMonthly = 0;
-      if (sub.billingCycle === 'monthly') subMonthly = sub.amount;
-      else if (sub.billingCycle === 'yearly') subMonthly = sub.amount / 12;
-      else if (sub.billingCycle === 'weekly') subMonthly = sub.amount * 4.33;
+      const localAmount = convertCurrency(sub.amount, sub.currency || 'USD', localCurrency.code);
+      if (sub.billingCycle === 'monthly') subMonthly = localAmount;
+      else if (sub.billingCycle === 'yearly') subMonthly = localAmount / 12;
+      else if (sub.billingCycle === 'weekly') subMonthly = localAmount * 4.33;
 
       if (categories[sub.category]) {
         categories[sub.category].amount += subMonthly;
@@ -123,6 +140,12 @@ export default function DashboardView({
 
   const isOverBudget = metrics.monthly > settings.budgetThreshold && settings.budgetThreshold > 0;
 
+  const formattedMonthly = useMemo(() => formatCurrency(metrics.monthly, localCurrency.code), [metrics.monthly, localCurrency.code]);
+  const formattedYearly = useMemo(() => formatCurrency(metrics.yearly, localCurrency.code), [metrics.yearly, localCurrency.code]);
+  const formattedThreshold = useMemo(() => {
+    return settings.budgetThreshold > 0 ? formatCurrency(settings.budgetThreshold, localCurrency.code).replace('.00', '') : '—';
+  }, [settings.budgetThreshold, localCurrency.code]);
+
   // 5. Export Report Functionality
   const triggerExport = (format: 'csv' | 'report') => {
     if (subscriptions.length === 0) {
@@ -145,8 +168,8 @@ export default function DashboardView({
     } else {
       // Elegant text-based analytical report
       const nowStr = new Date().toLocaleDateString(undefined, { dateStyle: 'long' });
-      const catSummary = categoryData.map(c => ` - ${c.name}: $${c.monthlyAmount.toFixed(2)}/mo (${c.percentage}%)`).join('\n');
-      const activeList = activeSubs.map(s => ` - ${s.name}: $${s.amount.toFixed(2)} (${s.billingCycle}) renewal on ${s.nextBillingDate}`).join('\n');
+      const catSummary = categoryData.map(c => ` - ${c.name}: ${formatCurrency(c.monthlyAmount, localCurrency.code)}/mo (${c.percentage}%)`).join('\n');
+      const activeList = activeSubs.map(s => ` - ${s.name}: ${formatCurrency(s.amount, s.currency)} (${s.billingCycle}) renewal on ${s.nextBillingDate}`).join('\n');
       
       fileContent = `=====================================================
 SUBSCRIPTION SPENDING ANALYTICS REPORT
@@ -157,9 +180,9 @@ OVERVIEW SUMMARY
 -----------------------------------------------------
 Total Subscriptions Tracked: ${subscriptions.length}
 Active Subscriptions: ${activeSubs.length}
-Total Estimated Monthly Expense: $${metrics.monthly.toFixed(2)}
-Total Estimated Annual Expense: $${metrics.yearly.toFixed(2)}
-Budget Threshold Limit: $${settings.budgetThreshold > 0 ? settings.budgetThreshold.toFixed(2) : 'No Limit Set'}
+Total Estimated Monthly Expense: ${formatCurrency(metrics.monthly, localCurrency.code)}
+Total Estimated Annual Expense: ${formatCurrency(metrics.yearly, localCurrency.code)}
+Budget Threshold Limit: ${settings.budgetThreshold > 0 ? formatCurrency(settings.budgetThreshold, localCurrency.code) : 'No Limit Set'}
 Budget Compliance Status: ${isOverBudget ? '⚠️ EXCEEDED BUDGET LIMIT' : '✅ COMPLIANT WITH BUDGET'}
 
 CATEGORY SPENDING BREAKDOWN (Monthly Equivalent)
@@ -172,7 +195,7 @@ ${activeList || 'No active subscriptions recorded.'}
 
 -----------------------------------------------------
 SMART INSIGHTS & SAVING TIPS
-${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.budgetThreshold).toFixed(2) + ' more than your target budget. Consider pausing or cancelling lower priority entertainment accounts.' : '• Good job! Your monthly subscriptions are fully within your preset budget limits.'}
+${isOverBudget ? '• ALERT: You are spending ' + formatCurrency(metrics.monthly - settings.budgetThreshold, localCurrency.code) + ' more than your target budget. Consider pausing or cancelling lower priority entertainment accounts.' : '• Good job! Your monthly subscriptions are fully within your preset budget limits.'}
 • Regularly audit services you haven't logged into for more than 30 days to avoid "vampire" charges.
 • Share family billing plans where permitted to cut costs by up to 50%.
 =====================================================`;
@@ -195,52 +218,52 @@ ${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.b
     <div className="space-y-6">
       
       {/* KPI Highlight Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className={`grid ${isAndroid ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'} gap-5`}>
         
         {/* Monthly Expense Card */}
-        <div className="bg-[#121214] border border-white/5 p-5 rounded-2xl shadow-xl flex items-center justify-between transition-all duration-200 hover:-translate-y-0.5">
-          <div className="space-y-1">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Monthly Spending</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl font-extrabold text-white tracking-tight">${metrics.monthly.toFixed(2)}</span>
-              <span className="text-xs text-slate-500 font-semibold">/mo</span>
+        <div className="bg-[#121214] border border-white/5 p-4 sm:p-5 rounded-2xl shadow-xl flex items-center justify-between transition-all duration-200 hover:-translate-y-0.5 gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest truncate block">Monthly Spending</span>
+            <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+              <span className={`${getAmountFontSize(formattedMonthly)} font-extrabold text-white tracking-tight truncate`}>{formattedMonthly}</span>
+              <span className="text-xs text-slate-500 font-semibold shrink-0">/mo</span>
             </div>
-            <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
-              <TrendingUp className="h-3.5 w-3.5 text-indigo-400" />
-              <span>Recurring active charges</span>
+            <p className="text-[11px] text-slate-400 flex items-center gap-1.5 truncate">
+              <TrendingUp className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <span className="truncate">Recurring active charges</span>
             </p>
           </div>
-          <div className="bg-indigo-500/10 text-indigo-400 p-4 rounded-xl border border-indigo-500/20">
-            <DollarSign className="h-5.5 w-5.5" />
+          <div className="bg-indigo-500/10 text-indigo-400 p-3 sm:p-4 rounded-xl border border-indigo-500/20 shrink-0">
+            <DollarSign className="h-5 sm:h-5.5 w-5 sm:w-5.5" />
           </div>
         </div>
 
         {/* Yearly Expense Card */}
-        <div className="bg-[#121214] border border-white/5 p-5 rounded-2xl shadow-xl flex items-center justify-between transition-all duration-200 hover:-translate-y-0.5">
-          <div className="space-y-1">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Yearly Spending</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl font-extrabold text-white tracking-tight">${metrics.yearly.toFixed(2)}</span>
-              <span className="text-xs text-slate-500 font-semibold">/yr</span>
+        <div className="bg-[#121214] border border-white/5 p-4 sm:p-5 rounded-2xl shadow-xl flex items-center justify-between transition-all duration-200 hover:-translate-y-0.5 gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest truncate block">Yearly Spending</span>
+            <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+              <span className={`${getAmountFontSize(formattedYearly)} font-extrabold text-white tracking-tight truncate`}>{formattedYearly}</span>
+              <span className="text-xs text-slate-500 font-semibold shrink-0">/yr</span>
             </div>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 truncate">
               Equivalent value over 12 months
             </p>
           </div>
-          <div className="bg-violet-500/10 text-violet-400 p-4 rounded-xl border border-violet-500/20">
-            <TrendingUp className="h-5.5 w-5.5" />
+          <div className="bg-violet-500/10 text-violet-400 p-3 sm:p-4 rounded-xl border border-violet-500/20 shrink-0">
+            <TrendingUp className="h-5 sm:h-5.5 w-5 sm:w-5.5" />
           </div>
         </div>
 
         {/* Budget Status Card */}
-        <div className={`bg-[#121214] border p-5 rounded-2xl shadow-xl flex items-center justify-between transition-all duration-200 hover:-translate-y-0.5 ${isOverBudget ? 'border-red-500/30 bg-red-950/10' : 'border-white/5'}`}>
-          <div className="space-y-1 w-full">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Budget Threshold</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl font-extrabold text-white tracking-tight">
-                ${settings.budgetThreshold > 0 ? settings.budgetThreshold.toFixed(0) : '—'}
+        <div className={`bg-[#121214] border p-4 sm:p-5 rounded-2xl shadow-xl flex items-center justify-between transition-all duration-200 hover:-translate-y-0.5 gap-3 ${isOverBudget ? 'border-red-500/30 bg-red-950/10' : 'border-white/5'}`}>
+          <div className="space-y-1 w-full min-w-0 flex-1">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest truncate block">Budget Threshold</span>
+            <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+              <span className={`${getAmountFontSize(formattedThreshold)} font-extrabold text-white tracking-tight truncate`}>
+                {formattedThreshold}
               </span>
-              <span className="text-xs text-slate-500 font-semibold">limit</span>
+              <span className="text-xs text-slate-500 font-semibold shrink-0">limit</span>
             </div>
             
             {settings.budgetThreshold > 0 ? (
@@ -251,13 +274,13 @@ ${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.b
                     style={{ width: `${budgetPercentage}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                  <span>{budgetPercentage}% used</span>
-                  <span className={isOverBudget ? 'text-red-400 font-extrabold' : 'text-emerald-400'}>{isOverBudget ? '⚠️ Over Budget' : 'Within budget'}</span>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400 gap-1.5">
+                  <span className="truncate shrink-0">{budgetPercentage}% used</span>
+                  <span className={`${isOverBudget ? 'text-red-400 font-extrabold animate-pulse' : 'text-emerald-400'} truncate`}>{isOverBudget ? '⚠️ Over Budget' : 'Within budget'}</span>
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-slate-500">No budget alert limit configured</p>
+              <p className="text-[11px] text-slate-500 truncate">No budget alert limit configured</p>
             )}
           </div>
         </div>
@@ -333,9 +356,11 @@ ${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.b
                         });
                       })()}
                     </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
                       <span className="text-[9px] uppercase font-bold tracking-widest text-slate-500">Total</span>
-                      <span className="text-xl font-extrabold text-white">${metrics.monthly.toFixed(0)}</span>
+                      <span className={`${formattedMonthly.length > 12 ? 'text-xs' : formattedMonthly.length > 8 ? 'text-sm' : 'text-base sm:text-lg md:text-xl'} font-extrabold text-white truncate max-w-[120px] block px-1`}>
+                        {formattedMonthly.replace('.00', '')}
+                      </span>
                       <span className="text-[9px] text-slate-400 font-semibold">/ month</span>
                     </div>
                   </div>
@@ -353,13 +378,13 @@ ${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.b
 
                     return (
                       <div key={cat.name} className="space-y-1">
-                        <div className="flex justify-between items-center text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${pillColor}`} />
-                            <span className="font-semibold text-slate-300">{cat.name}</span>
+                        <div className="flex justify-between items-center text-xs gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className={`w-2.5 h-2.5 rounded-full ${pillColor} shrink-0`} />
+                            <span className="font-semibold text-slate-300 truncate">{cat.name}</span>
                           </div>
-                          <span className="text-slate-200 font-semibold">
-                            ${cat.monthlyAmount.toFixed(2)} <span className="text-[10px] text-slate-500">({cat.percentage}%)</span>
+                          <span className="text-slate-200 font-semibold shrink-0 ml-2">
+                            {formatCurrency(cat.monthlyAmount, localCurrency.code)} <span className="text-[10px] text-slate-500">({cat.percentage}%)</span>
                           </span>
                         </div>
                         <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
@@ -439,7 +464,7 @@ ${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.b
                 <h4 className="font-bold text-xs uppercase tracking-wider text-red-300">Budget Warning</h4>
               </div>
               <p className="text-xs leading-relaxed text-red-200/90">
-                Your current monthly commitment of <b>${metrics.monthly.toFixed(2)}</b> exceeds your alert threshold of <b>${settings.budgetThreshold.toFixed(0)}</b>. 
+                Your current monthly commitment of <b>{formatCurrency(metrics.monthly, localCurrency.code)}</b> exceeds your alert threshold of <b>{formatCurrency(settings.budgetThreshold, localCurrency.code)}</b>. 
               </p>
               <div className="bg-red-950/40 p-2.5 rounded-xl border border-red-500/10 text-[11px] font-medium text-red-200 space-y-1">
                 <span className="font-bold text-[10px] text-red-400 block uppercase">Saving Recommendation:</span>
@@ -447,6 +472,12 @@ ${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.b
               </div>
             </div>
           )}
+
+          {/* Payment Confirmation Deck */}
+          <PaymentConfirmQueue 
+            subscriptions={subscriptions}
+            onConfirmPayment={onConfirmPayment}
+          />
 
           {/* Upcoming Renewals Widget */}
           <div className="bg-[#121214] border border-white/5 rounded-2xl p-5 shadow-xl space-y-4">
@@ -492,20 +523,25 @@ ${isOverBudget ? '• ALERT: You are spending $' + (metrics.monthly - settings.b
                   }
 
                   return (
-                    <div key={sub.id} className="flex items-center justify-between p-3 bg-[#1c1c1f] hover:bg-white/[0.02] border border-white/5 rounded-xl transition duration-150">
-                      <div className="space-y-0.5 max-w-[60%]">
+                    <div key={sub.id} className="flex items-center justify-between p-3 bg-[#1c1c1f] hover:bg-white/[0.02] border border-white/5 rounded-xl transition duration-150 gap-2">
+                      <div className="space-y-0.5 max-w-[60%] min-w-0 flex-1">
                         <p className="font-bold text-xs text-white truncate">{sub.name}</p>
-                        <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                          <span className="font-bold text-indigo-400 capitalize">{sub.billingCycle}</span>
-                          <span>•</span>
+                        <div className="flex items-center gap-1 text-[10px] text-slate-400 min-w-0">
+                          <span className="font-bold text-indigo-400 capitalize shrink-0">{sub.billingCycle}</span>
+                          <span className="shrink-0">•</span>
                           <span className="truncate">{sub.paymentMethod || 'Autopay'}</span>
                         </div>
                       </div>
                       
-                      <div className="text-right space-y-1">
-                        <span className="font-extrabold text-xs text-white block">
-                          ${sub.amount.toFixed(2)}
+                      <div className="text-right space-y-1 shrink-0 ml-2">
+                        <span className="font-extrabold text-xs text-white block truncate">
+                          {formatCurrency(sub.amount, sub.currency || 'USD')}
                         </span>
+                        {sub.currency !== localCurrency.code && (
+                          <span className="text-[10px] text-slate-500 font-semibold block truncate">
+                            ~{formatCurrency(convertCurrency(sub.amount, sub.currency, localCurrency.code), localCurrency.code)}
+                          </span>
+                        )}
                         <span className={`inline-block text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full font-bold ${badgeColor}`}>
                           {diffLabel}
                         </span>

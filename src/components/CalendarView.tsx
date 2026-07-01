@@ -8,6 +8,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { Subscription } from '../types';
+import { getUserLocalCurrency, convertCurrency, formatCurrency } from '../lib/currency';
 
 interface CalendarViewProps {
   subscriptions: Subscription[];
@@ -18,7 +19,12 @@ export default function CalendarView({
   subscriptions,
   onSelectSubscription
 }: CalendarViewProps) {
+  const localCurrency = getUserLocalCurrency();
   const [currentDate, setCurrentDate] = useState(() => new Date()); // July 2026 by default
+  const [selectedDay, setSelectedDay] = useState<number | null>(() => {
+    const now = new Date();
+    return now.getDate();
+  });
 
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
@@ -31,10 +37,12 @@ export default function CalendarView({
   // Navigate months
   const handlePrevMonth = () => {
     setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    setSelectedDay(1);
   };
 
   const handleNextMonth = () => {
     setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setSelectedDay(1);
   };
 
   // Get days in the selected month and the starting weekday index
@@ -113,15 +121,15 @@ export default function CalendarView({
     let counts = 0;
     (Object.values(calendarEvents) as { sub: Subscription; projectedAmount: number }[][]).forEach(dayList => {
       dayList.forEach(ev => {
-        total += ev.projectedAmount;
+        total += convertCurrency(ev.projectedAmount, ev.sub.currency, localCurrency.code);
         counts += 1;
       });
     });
     return {
-      total: Math.round(total * 100) / 100,
+      total,
       count: counts
     };
-  }, [calendarEvents]);
+  }, [calendarEvents, localCurrency.code]);
 
   // Calendar cells generation
   const cells = useMemo(() => {
@@ -212,26 +220,36 @@ export default function CalendarView({
           </div>
 
           {/* Day Grid */}
-          <div className="grid grid-cols-7 gap-1.5 md:gap-2.5">
+          <div className="grid grid-cols-7 gap-1 sm:gap-1.5 md:gap-2.5">
             {cells.map((cell, idx) => {
-              const dayTotal = cell.events.reduce((sum, ev) => sum + ev.projectedAmount, 0);
+              const dayTotalLocal = cell.events.reduce((sum, ev) => sum + convertCurrency(ev.projectedAmount, ev.sub.currency, localCurrency.code), 0);
+              const isSelected = cell.isCurrentMonth && selectedDay === cell.day;
 
               return (
                 <div
                   key={idx}
-                  className={`min-h-16 md:min-h-24 p-1.5 md:p-2 border rounded-xl flex flex-col justify-between transition relative overflow-hidden group ${
+                  onClick={() => {
+                    if (cell.isCurrentMonth) {
+                      setSelectedDay(cell.day);
+                    }
+                  }}
+                  className={`min-h-12 sm:min-h-16 md:min-h-24 p-1 sm:p-1.5 md:p-2 border rounded-xl flex flex-col justify-between transition relative overflow-hidden group cursor-pointer ${
                     cell.isCurrentMonth 
                       ? cell.isToday 
-                        ? 'bg-indigo-500/10 border-indigo-500/40 ring-2 ring-indigo-500/20' 
+                        ? 'bg-indigo-500/10 border-indigo-500/40 ring-2 ring-indigo-500/20 text-white font-extrabold' 
+                        : isSelected
+                        ? 'bg-indigo-600/15 border-indigo-500/50 text-indigo-200'
                         : 'bg-[#161619] border-white/5 hover:border-white/10' 
-                      : 'bg-white/[0.01] border-white/[0.02] text-slate-600'
+                      : 'bg-white/[0.01] border-white/[0.02] text-slate-600 cursor-default'
                   }`}
                 >
-                  <div className="flex justify-between items-center">
-                    <span className={`text-[11px] md:text-xs font-bold ${
+                  <div className="flex justify-between items-center w-full">
+                    <span className={`text-[10px] sm:text-[11px] md:text-xs font-bold ${
                       cell.isCurrentMonth
                         ? cell.isToday 
-                          ? 'text-indigo-300 bg-indigo-500/20 px-1.5 py-0.5 rounded-md border border-indigo-500/10' 
+                          ? 'text-indigo-300 bg-indigo-500/20 px-1 sm:px-1.5 py-0.5 rounded-md border border-indigo-500/10' 
+                          : isSelected
+                          ? 'text-indigo-300'
                           : 'text-slate-300'
                         : 'text-slate-600'
                     }`}>
@@ -239,46 +257,124 @@ export default function CalendarView({
                     </span>
                     
                     {/* Day billing totals */}
-                    {dayTotal > 0 && cell.isCurrentMonth && (
-                      <span className="text-[10px] font-extrabold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded-md border border-indigo-500/20 hidden sm:inline-block">
-                        ${dayTotal.toFixed(0)}
+                    {dayTotalLocal > 0 && cell.isCurrentMonth && (
+                      <span className="text-[9px] md:text-[10px] font-extrabold text-indigo-400 bg-indigo-500/10 px-1 md:px-1.5 py-0.5 rounded-md border border-indigo-500/20 hidden sm:inline-block">
+                        {formatCurrency(dayTotalLocal, localCurrency.code).replace('.00', '')}
                       </span>
                     )}
                   </div>
 
                   {/* Billings list */}
-                  <div className="space-y-1 mt-1.5 md:mt-2.5 flex-1 overflow-y-auto max-h-14">
+                  <div className="hidden sm:block space-y-1 mt-1.5 md:mt-2.5 flex-1 overflow-y-auto max-h-14">
                     {cell.isCurrentMonth && cell.events.map(({ sub, projectedAmount }) => {
                       let tagColor = 'bg-slate-800 text-slate-300 hover:bg-slate-700';
                       if (sub.category === 'Entertainment') tagColor = 'bg-indigo-950/40 text-indigo-300 border border-indigo-500/20 hover:bg-indigo-900/30';
                       if (sub.category === 'Utilities') tagColor = 'bg-amber-950/40 text-amber-300 border border-amber-500/20 hover:bg-amber-900/30';
-                      if (sub.category === 'Health & Fitness') tagColor = 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-900/30';
+                      if (sub.category === 'Health & Fitness') tagColor = 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/20 hover:bg-indigo-900/30';
                       if (sub.category === 'Software & Services') tagColor = 'bg-sky-950/40 text-sky-300 border border-sky-500/20 hover:bg-sky-900/30';
                       if (sub.category === 'Financial') tagColor = 'bg-rose-950/40 text-rose-300 border border-rose-500/20 hover:bg-rose-900/30';
+
+                      const localAmt = convertCurrency(projectedAmount, sub.currency, localCurrency.code);
 
                       return (
                         <div
                           key={sub.id}
-                          onClick={() => onSelectSubscription(sub)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectSubscription(sub);
+                          }}
                           className={`text-[9px] font-bold p-1 rounded border transition cursor-pointer flex items-center justify-between gap-1 truncate ${tagColor}`}
-                          title={`${sub.name} - $${projectedAmount} (${sub.billingCycle})`}
+                          title={`${sub.name} - ${formatCurrency(localAmt, localCurrency.code)} (${sub.billingCycle})`}
                         >
                           <span className="truncate flex-1 font-extrabold">{sub.name}</span>
-                          <span className="shrink-0 font-extrabold">${projectedAmount.toFixed(0)}</span>
+                          <span className="shrink-0 font-extrabold">{formatCurrency(localAmt, localCurrency.code).replace('.00', '')}</span>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Tiny indicator for mobile viewports */}
+                  {/* Tiny colored dots categories indicators for mobile viewports */}
                   {cell.events.length > 0 && cell.isCurrentMonth && (
-                    <div className="sm:hidden absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                    <div className="sm:hidden absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5 justify-center max-w-[90%]">
+                      {cell.events.slice(0, 3).map((ev, i) => {
+                        let dotColor = 'bg-slate-400';
+                        if (ev.sub.category === 'Entertainment') dotColor = 'bg-indigo-500';
+                        if (ev.sub.category === 'Utilities') dotColor = 'bg-amber-500';
+                        if (ev.sub.category === 'Health & Fitness') dotColor = 'bg-emerald-500';
+                        if (ev.sub.category === 'Software & Services') dotColor = 'bg-sky-500';
+                        if (ev.sub.category === 'Financial') dotColor = 'bg-rose-500';
+                        return <span key={i} className={`h-1.5 w-1.5 rounded-full ${dotColor} shrink-0`} />;
+                      })}
+                      {cell.events.length > 3 && (
+                        <span className="text-[7px] text-indigo-400 font-extrabold leading-none -mt-0.5">+</span>
+                      )}
+                    </div>
                   )}
                 </div>
               );
             })}
           </div>
         </div>
+
+        {/* Selected Day Details Section (highly useful on mobile screens) */}
+        {selectedDay && (
+          <div className="p-3.5 bg-[#161619]/60 border border-white/5 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2">
+              <span className="text-xs font-bold text-white uppercase tracking-wider">
+                Due on {monthNames[currentMonth]} {selectedDay}
+              </span>
+              <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold px-2 py-0.5 rounded-full">
+                {(cells.find(c => c.isCurrentMonth && c.day === selectedDay)?.events || []).length} Billed
+              </span>
+            </div>
+            
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {(() => {
+                const dayEvents = (cells.find(c => c.isCurrentMonth && c.day === selectedDay)?.events || []);
+                if (dayEvents.length === 0) {
+                  return (
+                    <p className="text-[11px] text-slate-500 text-center py-2.5">No subscription payments due on this day.</p>
+                  );
+                }
+                
+                return dayEvents.map(({ sub, projectedAmount }) => {
+                  let badgeColor = 'bg-slate-800 text-slate-300 border border-white/5';
+                  if (sub.category === 'Entertainment') badgeColor = 'bg-indigo-950/40 text-indigo-300 border border-indigo-500/20';
+                  if (sub.category === 'Utilities') badgeColor = 'bg-amber-950/40 text-amber-300 border border-amber-500/20';
+                  if (sub.category === 'Health & Fitness') badgeColor = 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/20';
+                  if (sub.category === 'Software & Services') badgeColor = 'bg-sky-950/40 text-sky-300 border border-sky-500/20';
+                  if (sub.category === 'Financial') badgeColor = 'bg-rose-950/40 text-rose-300 border border-rose-500/20';
+
+                  return (
+                    <div 
+                      key={sub.id} 
+                      onClick={() => onSelectSubscription(sub)}
+                      className="flex items-center justify-between p-2.5 bg-[#1c1c1f] hover:bg-white/[0.02] border border-white/5 rounded-xl cursor-pointer transition duration-150"
+                    >
+                      <div className="space-y-0.5 max-w-[60%]">
+                        <p className="font-bold text-xs text-white truncate">{sub.name}</p>
+                        <span className={`inline-block text-[8px] uppercase tracking-wider px-1.5 py-0.25 rounded-full font-extrabold ${badgeColor}`}>
+                          {sub.category}
+                        </span>
+                      </div>
+                      
+                      <div className="text-right space-y-0.5">
+                        <span className="font-extrabold text-xs text-white block">
+                          {formatCurrency(projectedAmount, sub.currency)}
+                        </span>
+                        {sub.currency !== localCurrency.code && (
+                          <span className="text-[9px] text-slate-500 font-medium block">
+                            ~{formatCurrency(convertCurrency(projectedAmount, sub.currency, localCurrency.code), localCurrency.code)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
 
       </div>
 
@@ -293,7 +389,7 @@ export default function CalendarView({
           <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl text-center space-y-1">
             <span className="text-[10px] uppercase font-bold text-indigo-300 tracking-widest">Estimated Total Due</span>
             <div className="flex items-baseline justify-center gap-1 text-white">
-              <span className="text-3xl font-extrabold tracking-tight">${monthStats.total.toFixed(2)}</span>
+              <span className="text-3xl font-extrabold tracking-tight">{formatCurrency(monthStats.total, localCurrency.code)}</span>
             </div>
             <p className="text-[10px] text-indigo-400 font-medium">{monthStats.count} recurring charges projected</p>
           </div>
@@ -319,25 +415,28 @@ export default function CalendarView({
                       }
                       return unique;
                     }, [])
-                    .map(({ sub, projectedAmount }) => (
-                      <div 
-                        key={sub.id} 
-                        onClick={() => onSelectSubscription(sub)}
-                        className="py-2.5 flex items-center justify-between hover:bg-white/[0.02] rounded-lg px-2 transition cursor-pointer text-xs"
-                      >
-                        <div className="space-y-0.5 max-w-[65%]">
-                          <span className="font-bold text-white block truncate">{sub.name}</span>
-                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                            <Tag className="h-3 w-3 text-indigo-400 shrink-0" />
-                            <span className="truncate">{sub.category}</span>
+                    .map(({ sub, projectedAmount }) => {
+                      const localAmt = convertCurrency(projectedAmount, sub.currency, localCurrency.code);
+                      return (
+                        <div 
+                          key={sub.id} 
+                          onClick={() => onSelectSubscription(sub)}
+                          className="py-2.5 flex items-center justify-between hover:bg-white/[0.02] rounded-lg px-2 transition cursor-pointer text-xs"
+                        >
+                          <div className="space-y-0.5 max-w-[65%]">
+                            <span className="font-bold text-white block truncate">{sub.name}</span>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                              <Tag className="h-3 w-3 text-indigo-400 shrink-0" />
+                              <span className="truncate">{sub.category}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-extrabold text-white block">{formatCurrency(localAmt, localCurrency.code)}</span>
+                            <span className="text-[10px] text-slate-400 block font-bold uppercase capitalize">{sub.billingCycle}</span>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className="font-extrabold text-white block">${projectedAmount.toFixed(2)}</span>
-                          <span className="text-[10px] text-slate-400 block font-bold uppercase capitalize">{sub.billingCycle}</span>
-                        </div>
-                      </div>
-                    ));
+                      );
+                    });
                 })()
               )}
             </div>

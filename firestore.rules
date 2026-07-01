@@ -12,107 +12,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isEmailVerified() {
-      return isSignedIn();
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128;
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isValidSubscription(data) {
-      return data.userId == request.auth.uid &&
-             (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 200)) &&
-             (!('amount' in data) || (data.amount is number && data.amount >= 0)) &&
-             (!('currency' in data) || (data.currency is string && data.currency.size() > 0 && data.currency.size() <= 10)) &&
-             (!('billingCycle' in data) || (data.billingCycle is string && (data.billingCycle == 'weekly' || data.billingCycle == 'monthly' || data.billingCycle == 'yearly'))) &&
-             (!('nextBillingDate' in data) || (data.nextBillingDate is string && data.nextBillingDate.size() <= 30)) &&
-             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() <= 100)) &&
-             (!('status' in data) || (data.status is string && (data.status == 'active' || data.status == 'paused' || data.status == 'cancelled'))) &&
-             (!('category' in data) || (data.category is string && data.category.size() <= 100)) &&
-             (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
-             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100));
-    }
-
-    function isValidSettings(data) {
-      return (!('budgetThreshold' in data) || (data.budgetThreshold is number && data.budgetThreshold >= 0)) &&
-             (!('enableReminders' in data) || (data.enableReminders is bool)) &&
-             (!('reminderDaysBefore' in data) || (data.reminderDaysBefore is number && data.reminderDaysBefore >= 0)) &&
-             (!('enableBudgetAlerts' in data) || (data.enableBudgetAlerts is bool));
-    }
-
-    function isValidAlert(data) {
-      return data.userId == request.auth.uid &&
-             (!('type' in data) || (data.type is string && (data.type == 'warning' || data.type == 'info' || data.type == 'success'))) &&
-             (!('message' in data) || (data.message is string && data.message.size() > 0 && data.message.size() <= 1000)) &&
-             (!('date' in data) || (data.date is string && data.date.size() <= 100)) &&
-             (!('read' in data) || (data.read is bool));
-    }
-
-    // Rules for collections
     match /users/{userId} {
-      allow get, delete: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+      allow get, create, update, delete: if isSignedIn() && request.auth.uid == userId;
 
       // Subscriptions collection
       match /subscriptions/{subscriptionId} {
-        allow list: if isSignedIn() && request.auth.uid == userId;
-        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(subscriptionId);
-        
-        allow create: if isEmailVerified() && request.auth.uid == userId && isValidId(subscriptionId) &&
-                      isValidSubscription(incoming()) &&
-                      incoming().keys().hasAll(['name', 'amount', 'currency', 'billingCycle', 'nextBillingDate', 'paymentMethod', 'status', 'category', 'userId']) &&
-                      incoming().keys().size() >= 9 && incoming().keys().size() <= 11;
-
-        allow update: if isEmailVerified() && request.auth.uid == userId && isValidId(subscriptionId) &&
-                      isValidSubscription(incoming()) && (
-                        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'amount', 'currency', 'billingCycle', 'nextBillingDate', 'paymentMethod', 'status', 'category', 'notes', 'userId']) ||
-                        incoming().diff(existing()).affectedKeys().hasOnly(['status'])
-                      ) &&
-                      incoming().userId == existing().userId;
-
-        allow delete: if isEmailVerified() && request.auth.uid == userId && isValidId(subscriptionId);
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
 
       // Settings subcollection
       match /settings/{settingsId} {
-        allow list: if isSignedIn() && request.auth.uid == userId;
-        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(settingsId);
-
-        allow create: if isEmailVerified() && request.auth.uid == userId && isValidId(settingsId) &&
-                      isValidSettings(incoming()) &&
-                      incoming().keys().hasAll(['budgetThreshold', 'enableReminders', 'reminderDaysBefore', 'enableBudgetAlerts']) &&
-                      incoming().keys().size() == 4;
-
-        allow update: if isEmailVerified() && request.auth.uid == userId && isValidId(settingsId) &&
-                      isValidSettings(incoming()) &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['budgetThreshold', 'enableReminders', 'reminderDaysBefore', 'enableBudgetAlerts']);
-
-        allow delete: if isEmailVerified() && request.auth.uid == userId && isValidId(settingsId);
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
 
       // Alerts subcollection
       match /alerts/{alertId} {
-        allow list: if isSignedIn() && request.auth.uid == userId;
-        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(alertId);
-
-        allow create: if isEmailVerified() && request.auth.uid == userId && isValidId(alertId) &&
-                      isValidAlert(incoming()) &&
-                      incoming().keys().hasAll(['type', 'message', 'date', 'read', 'userId']) &&
-                      incoming().keys().size() == 5;
-
-        allow update: if isEmailVerified() && request.auth.uid == userId && isValidId(alertId) &&
-                      isValidAlert(incoming()) &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['read']);
-
-        allow delete: if isEmailVerified() && request.auth.uid == userId && isValidId(alertId);
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
     }
   }

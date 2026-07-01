@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Subscription Tracker</string>
+    <string name="title_activity_main">Subscription Tracker</string>
+    <string name="package_name">com.subscriptiontracker.app</string>
+    <string name="custom_url_scheme">com.subscriptiontracker.app</string>
+</resources>

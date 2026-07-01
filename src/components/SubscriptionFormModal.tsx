@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Tag, DollarSign, Calendar, Info, Trash2 } from 'lucide-react';
 import { Subscription, SubscriptionCategory, SubscriptionStatus, BillingCycle } from '../types';
+import { getUserLocalCurrency, CURRENCY_SYMBOLS } from '../lib/currency';
 
 interface SubscriptionFormModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ export default function SubscriptionFormModal({
   
   const [name, setName] = useState('');
   const [amount, setAmount] = useState<number>(0);
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('INR');
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   const [nextBillingDate, setNextBillingDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Credit Card');
@@ -33,7 +34,7 @@ export default function SubscriptionFormModal({
     if (subscription) {
       setName(subscription.name);
       setAmount(subscription.amount);
-      setCurrency(subscription.currency || 'USD');
+      setCurrency(subscription.currency || 'INR');
       setBillingCycle(subscription.billingCycle);
       setNextBillingDate(subscription.nextBillingDate);
       setPaymentMethod(subscription.paymentMethod || '');
@@ -42,9 +43,10 @@ export default function SubscriptionFormModal({
       setNotes(subscription.notes || '');
     } else {
       // Defaults for adding new
+      const detected = getUserLocalCurrency();
       setName('');
       setAmount(0);
-      setCurrency('USD');
+      setCurrency(detected.code);
       setBillingCycle('monthly');
       
       // Set default next billing date to today + 1 month
@@ -140,22 +142,18 @@ export default function SubscriptionFormModal({
             <div className="space-y-1">
               <label className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Price / Rate</label>
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="USD"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="w-16 text-center bg-[#1c1c1f] border border-white/5 rounded-xl p-3 font-bold text-indigo-400 uppercase focus:bg-[#1c1c1f] focus:outline-none"
-                />
+                <div className="w-16 flex items-center justify-center bg-[#1c1c1f]/50 border border-white/5 rounded-xl p-3 font-bold text-indigo-400 select-none">
+                  INR
+                </div>
                 <div className="relative flex-1">
-                  <div className="absolute left-3 top-3 text-slate-500 font-semibold">$</div>
+                  <div className="absolute left-3.5 top-3.5 text-slate-500 font-bold select-none">₹</div>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="0.00"
                     value={amount || ''}
                     onChange={(e) => setAmount(Number(e.target.value))}
-                    className="w-full pl-7 pr-3 py-3 bg-[#1c1c1f] border border-white/5 rounded-xl font-extrabold text-white focus:bg-[#1c1c1f] focus:outline-none focus:border-indigo-500 transition"
+                    className="w-full pl-8 pr-3 py-3 bg-[#1c1c1f] border border-white/5 rounded-xl font-extrabold text-white focus:bg-[#1c1c1f] focus:outline-none focus:border-indigo-500 transition"
                   />
                 </div>
               </div>
